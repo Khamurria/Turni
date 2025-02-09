@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestione Turni - Area Staff</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    /* Stili di base */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f4f7f9;
+      margin: 0;
+      padding: 20px;
+      color: #000; /* Titoli in nero */
+    }
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    header h1 {
+      color: #000;
+      margin-bottom: 10px;
+      font-size: 2em;
+    }
+    /* Pulsanti sotto il titolo */
+    .btn-group {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .btn-group button {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      color: #fff;
+    }
+    #btnStatistiche { background: #17a2b8; }
+    #btnEmp { background: #ffc107; color: #000; }
+    #btnLogout { background: #dc3545; }
+    /* Barra di navigazione del mese */
+    .month-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 0 10px;
+    }
+    .month-nav button {
+      background: #5563DE;
+      border: none;
+      color: #fff;
+      padding: 8px 16px;
+      font-size: 1.2em;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .month-nav span {
+      font-size: 2em;
+      font-weight: bold;
+      color: #000;
+    }
+    /* Griglia del calendario */
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 15px;
+    }
+    .day-cell {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      height: 350px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .day-header {
+      text-align: center;
+      font-size: 1.3em;
+      font-weight: bold;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 4px;
+    }
+    .slots-container {
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+    .slot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px dashed #eee;
+      font-size: 0.9em;
+    }
+    .slot:last-child {
+      border-bottom: none;
+    }
+    .slot .name-slot {
+      flex-basis: 35%;
+      text-align: left;
+      line-height: 1.2em;
+    }
+    .slot .time-slot {
+      flex-basis: 35%;
+      text-align: center;
+    }
+    .slot .just-slot {
+      flex-basis: 30%;
+      text-align: right;
+      font-style: italic;
+      color: #555;
+    }
+    /* Modal per editing turno */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      width: 320px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      position: relative;
+    }
+    .close-button {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      font-size: 24px;
+      cursor: pointer;
+      color: #888;
+    }
+    .modal-content label {
+      display: block;
+      margin-top: 10px;
+      font-size: 0.9em;
+    }
+    .modal-content select {
+      width: 100%;
+      padding: 6px;
+      margin-top: 5px;
+      font-size: 1em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .modal-content button {
+      margin-top: 15px;
+      padding: 8px 12px;
+      width: 48%;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      color: #fff;
+    }
+    #btnSaveModal { background: #28a745; }
+    #btnCancelModal { background: #dc3545; }
+    /* Modal per gestione dipendenti */
+    #empModal .modal-content {
+      width: 400px;
+    }
+    #empModal table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+    }
+    #empModal th, #empModal td {
+      border: 1px solid #ddd;
+      padding: 6px;
+      text-align: center;
+      font-size: 0.9em;
+    }
+    #empModal th {
+      background: #5563DE;
+      color: #fff;
+    }
+    #empModal input[type="text"] {
+      width: 48%;
+      padding: 6px;
+      margin: 4px 1%;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    #empModal button {
+      margin-top: 10px;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+      color: #fff;
+    }
+    #btnAddEmp { background: #17a2b8; }
+    #btnCloseEmp { background: #dc3545; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Area Staff - Gestione Turni</h1>
+    <div class="btn-group">
+      <button id="btnStatistiche" onclick="window.location.href='statistiche.html'">Statistiche</button>
+      <button id="btnEmp">Modifica Dipendenti</button>
+      <button id="btnLogout">Logout</button>
+    </div>
+    <div class="month-nav">
+      <button id="prevMonth">&laquo;</button>
+      <span id="monthYearHeader">Gennaio 2025</span>
+      <button id="nextMonth">&raquo;</button>
+    </div>
+  </header>
+
+  <section id="scheduleSection">
+    <div id="calendarGrid" class="calendar-grid"></div>
+  </section>
+
+  <!-- Modal per editing turno -->
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button" id="modalClose">&times;</span>
+      <h2>Modifica Turno</h2>
+      <label for="selectStart">Orario Inizio:</label>
+      <select id="selectStart"></select>
+      
+      <label for="selectEnd">Orario Fine:</label>
+      <select id="selectEnd"></select>
+      
+      <label for="selectJustification">Giustificativo:</label>
+      <select id="selectJustification">
+        <option value="standard">Standard</option>
+        <option value="sede">Sede</option>
+        <option value="Smart Working">Smart Working</option>
+        <option value="ferie">Ferie</option>
+        <option value="festivo">Festivo</option>
+        <option value="cambio turno">Cambio Turno</option>
+        <option value="riposo">Riposo</option>
+      </select>
+      
+      <div style="margin-top:15px; text-align: center;">
+        <button id="btnSaveModal">Salva</button>
+        <button id="btnCancelModal">Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal per gestione dipendenti -->
+  <div id="empModal" class="modal">
+    <div class="modal-content">
+      <span class="close-button" id="empModalClose">&times;</span>
+      <h2>Gestione Dipendenti</h2>
+      <div id="empListContainer"></div>
+      <div style="display: flex; justify-content: space-between;">
+        <input type="text" id="empFirstName" placeholder="Nome">
+        <input type="text" id="empLastName" placeholder="Cognome">
+      </div>
+      <button id="btnAddEmp">Aggiungi Dipendente</button>
+      <div style="text-align: center; margin-top:10px;">
+        <button id="btnCloseEmp">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      // Variabili globali e dati
+      let gistID = localStorage.getItem("myApp_gistID") || null;
+      let githubToken = localStorage.getItem("myApp_token") || null;
+      let appData = JSON.parse(localStorage.getItem("myApp_appData") || "null");
+      if (!appData) {
+        appData = {
+          employees: [
+            { id: "1", name: "Valeria Castelli" },
+            { id: "2", name: "Andrea Giordano" },
+            { id: "3", name: "Luca Bianchi" }
+          ],
+          shifts: []
+        };
+        localStorage.setItem("myApp_appData", JSON.stringify(appData));
+      }
+      
+      let currentMonth = 0; // Gennaio
+      let currentYear = 2025;
+      let editingDate = null;
+      
+      const monthYearHeader = document.getElementById("monthYearHeader");
+      const calendarGrid = document.getElementById("calendarGrid");
+      
+      // Imposta le frecce del mese
+      document.getElementById("prevMonth").addEventListener("click", function() {
+        if (currentMonth === 0) {
+          currentMonth = 11;
+          currentYear--;
+        } else {
+          currentMonth--;
+        }
+        renderCalendar();
+      });
+      document.getElementById("nextMonth").addEventListener("click", function() {
+        if (currentMonth === 11) {
+          currentMonth = 0;
+          currentYear++;
+        } else {
+          currentMonth++;
+        }
+        renderCalendar();
+      });
+      
+      // Pulsanti header
+      document.getElementById("btnLogout").addEventListener("click", function() {
+        localStorage.removeItem("myApp_isStaff");
+        window.location.href = "index.html";
+      });
+      document.getElementById("btnEmp").addEventListener("click", openEmpModal);
+      
+      // Modal turni
+      document.getElementById("modalClose").addEventListener("click", closeModal);
+      document.getElementById("btnCancelModal").addEventListener("click", closeModal);
+      document.getElementById("btnSaveModal").addEventListener("click", saveModalData);
+      document.getElementById("selectJustification").addEventListener("change", function(){
+        let val = this.value;
+        if(val === "ferie" || val === "festivo") {
+          document.getElementById("selectStart").disabled = true;
+          document.getElementById("selectEnd").disabled = true;
+        } else {
+          document.getElementById("selectStart").disabled = false;
+          document.getElementById("selectEnd").disabled = false;
+        }
+      });
+      
+      // Modal dipendenti
+      document.getElementById("empModalClose").addEventListener("click", closeEmpModal);
+      document.getElementById("btnCloseEmp").addEventListener("click", closeEmpModal);
+      document.getElementById("btnAddEmp").addEventListener("click", addEmployee);
+      
+      initTimeSelects();
+      renderCalendar();
+      
+      // Funzioni
+      function renderCalendar() {
+        monthYearHeader.textContent = getMonthYear(currentMonth, currentYear);
+        calendarGrid.innerHTML = "";
+        let daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        for (let day = 1; day <= daysInMonth; day++) {
+          let dateObj = new Date(currentYear, currentMonth, day);
+          let isoDate = dateObj.toISOString().split("T")[0];
+          
+          let dayCell = document.createElement("div");
+          dayCell.className = "day-cell";
+          
+          let dayHeader = document.createElement("div");
+          dayHeader.className = "day-header";
+          let options = { weekday: 'long' };
+          let dayName = dateObj.toLocaleDateString('it-IT', options);
+          dayHeader.textContent = day + " - " + capitalizeFirstLetter(dayName);
+          dayCell.appendChild(dayHeader);
+          
+          let slotsContainer = document.createElement("div");
+          slotsContainer.className = "slots-container";
+          
+          let slots = appData.employees.map(emp => {
+            let shift = appData.shifts.find(s => s.employeeId === emp.id && s.date === isoDate);
+            return { employee: emp, shift: shift || null };
+          });
+          slots.sort((a, b) => {
+            let tA = a.shift && a.shift.start ? a.shift.start : "23:59";
+            let tB = b.shift && b.shift.start ? b.shift.start : "23:59";
+            return tA.localeCompare(tB);
+          });
+          for (let i = 0; i < 9; i++) {
+            let slotDiv = document.createElement("div");
+            slotDiv.className = "slot";
+            if (i < slots.length) {
+              let { employee, shift } = slots[i];
+              let parts = employee.name.split(" ");
+              let firstName = parts[0] || "";
+              let lastName = parts.slice(1).join(" ") || "";
+              
+              let nameDiv = document.createElement("div");
+              nameDiv.className = "name-slot";
+              nameDiv.innerHTML = `<div>${firstName}</div><div>${lastName}</div>`;
+              
+              let timeDiv = document.createElement("div");
+              timeDiv.className = "time-slot";
+              if (shift && shift.start && shift.end && !["ferie", "festivo"].includes(shift.type.toLowerCase())) {
+                timeDiv.textContent = shift.start + " - " + shift.end;
+              }
+              
+              let justDiv = document.createElement("div");
+              justDiv.className = "just-slot";
+              if (shift) {
+                justDiv.textContent = shift.type;
+              }
+              
+              slotDiv.appendChild(nameDiv);
+              slotDiv.appendChild(timeDiv);
+              slotDiv.appendChild(justDiv);
+            } else {
+              slotDiv.innerHTML = "&nbsp;";
+            }
+            slotsContainer.appendChild(slotDiv);
+          }
+          
+          dayCell.appendChild(slotsContainer);
+          dayCell.addEventListener("click", () => {
+            editingDate = isoDate;
+            openModal();
+          });
+          calendarGrid.appendChild(dayCell);
+        }
+      }
+      
+      function getMonthYear(m, y) {
+        const monthNames = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+        return monthNames[m] + " " + y;
+      }
+      
+      function capitalizeFirstLetter(str) {
+        return str.charAt(0).toUpperCase() + str.slice(1);
+      }
+      
+      function openModal() {
+        const modal = document.getElementById("editModal");
+        initTimeSelects();
+        let shift = appData.shifts.find(s => s.date === editingDate);
+        if (shift) {
+          document.getElementById("selectStart").value = shift.start || "08:00";
+          document.getElementById("selectEnd").value = shift.end || "08:30";
+          document.getElementById("selectJustification").value = shift.type || "standard";
+          if (["ferie","festivo"].includes(shift.type.toLowerCase())) {
+            document.getElementById("selectStart").disabled = true;
+            document.getElementById("selectEnd").disabled = true;
+          } else {
+            document.getElementById("selectStart").disabled = false;
+            document.getElementById("selectEnd").disabled = false;
+          }
+        } else {
+          document.getElementById("selectStart").value = "08:00";
+          document.getElementById("selectEnd").value = "08:30";
+          document.getElementById("selectJustification").value = "standard";
+          document.getElementById("selectStart").disabled = false;
+          document.getElementById("selectEnd").disabled = false;
+        }
+        modal.style.display = "flex";
+      }
+      
+      function closeModal() {
+        document.getElementById("editModal").style.display = "none";
+        editingDate = null;
+      }
+      
+      function saveModalData() {
+        const start = document.getElementById("selectStart").value;
+        const end = document.getElementById("selectEnd").value;
+        const justification = document.getElementById("selectJustification").value;
+        
+        let shift = appData.shifts.find(s => s.date === editingDate);
+        if (!shift) {
+          shift = { date: editingDate, type: justification, start: start, end: end };
+          appData.shifts.push(shift);
+        } else {
+          shift.type = justification;
+          if (["ferie", "festivo"].includes(justification.toLowerCase())) {
+            shift.start = "";
+            shift.end = "";
+          } else {
+            shift.start = start;
+            shift.end = end;
+          }
+        }
+        localStorage.setItem("myApp_appData", JSON.stringify(appData));
+        saveToGist();
+        closeModal();
+        renderCalendar();
+      }
+      
+      function initTimeSelects() {
+        const selectStart = document.getElementById("selectStart");
+        const selectEnd = document.getElementById("selectEnd");
+        selectStart.innerHTML = "";
+        selectEnd.innerHTML = "";
+        for (let h = 8; h <= 20; h++) {
+          for (let m = 0; m < 60; m += 30) {
+            let timeStr = (h < 10 ? "0" + h : h) + ":" + (m === 0 ? "00" : m);
+            let optStart = document.createElement("option");
+            optStart.value = timeStr;
+            optStart.textContent = timeStr;
+            selectStart.appendChild(optStart);
+            
+            let optEnd = document.createElement("option");
+            optEnd.value = timeStr;
+            optEnd.textContent = timeStr;
+            selectEnd.appendChild(optEnd);
+          }
+        }
+      }
+      
+      function saveToGist() {
+        if (!gistID || !githubToken) {
+          alert("Credenziali mancanti.");
+          return;
+        }
+        const newContent = JSON.stringify(appData, null, 2);
+        fetch(`https://api.github.com/gists/${gistID}`, {
+          method: "PATCH",
+          headers: {
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json",
+            "Authorization": `token ${githubToken}`
+          },
+          body: JSON.stringify({ files: { "shifts.json": { content: newContent } } })
+        })
+        .then(res => {
+          if (!res.ok) throw new Error("Errore HTTP: " + res.status);
+          return res.json();
+        })
+        .then(updated => {
+          console.log("Dati salvati su Gist.");
+        })
+        .catch(err => {
+          console.error("Errore salvataggio:", err);
+          alert("Errore durante il salvataggio su Gist. Vedi console.");
+        });
+      }
+      
+      function openEmpModal() {
+        renderEmpList();
+        document.getElementById("empModal").style.display = "flex";
+      }
+      
+      function closeEmpModal() {
+        document.getElementById("empModal").style.display = "none";
+      }
+      
+      function renderEmpList() {
+        const container = document.getElementById("empListContainer");
+        container.innerHTML = "";
+        let table = document.createElement("table");
+        let thead = document.createElement("thead");
+        let headerRow = document.createElement("tr");
+        ["ID", "Nome", "Azioni"].forEach(col => {
+          let th = document.createElement("th");
+          th.textContent = col;
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        
+        let tbody = document.createElement("tbody");
+        appData.employees.forEach(emp => {
+          let row = document.createElement("tr");
+          let tdId = document.createElement("td");
+          tdId.textContent = emp.id;
+          let tdName = document.createElement("td");
+          tdName.textContent = emp.name;
+          let tdActions = document.createElement("td");
+          let btnDelete = document.createElement("button");
+          btnDelete.textContent = "Elimina";
+          btnDelete.style.background = "#dc3545";
+          btnDelete.style.border = "none";
+          btnDelete.style.color = "#fff";
+          btnDelete.style.padding = "4px 8px";
+          btnDelete.style.borderRadius = "4px";
+          btnDelete.style.cursor = "pointer";
+          btnDelete.addEventListener("click", () => {
+            if (confirm("Eliminare questo dipendente?")) {
+              appData.employees = appData.employees.filter(e => e.id !== emp.id);
+              localStorage.setItem("myApp_appData", JSON.stringify(appData));
+              renderEmpList();
+              renderCalendar();
+              saveToGist();
+            }
+          });
+          tdActions.appendChild(btnDelete);
+          
+          row.appendChild(tdId);
+          row.appendChild(tdName);
+          row.appendChild(tdActions);
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        container.appendChild(table);
+      }
+      
+      function addEmployee() {
+        let firstName = document.getElementById("empFirstName").value.trim();
+        let lastName = document.getElementById("empLastName").value.trim();
+        if (!firstName || !lastName) {
+          alert("Inserisci nome e cognome.");
+          return;
+        }
+        let newId = Date.now().toString();
+        let newEmp = { id: newId, name: firstName + " " + lastName };
+        appData.employees.push(newEmp);
+        localStorage.setItem("myApp_appData", JSON.stringify(appData));
+        document.getElementById("empFirstName").value = "";
+        document.getElementById("empLastName").value = "";
+        renderEmpList();
+        renderCalendar();
+        saveToGist();
+      }
+      
+      function logout() {
+        localStorage.removeItem("myApp_isStaff");
+        window.location.href = "index.html";
+      }
+    });
+  </script>
+</body>
+</html>
