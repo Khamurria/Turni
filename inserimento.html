@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Inserimento e Statistiche</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    header, section {
+      margin-bottom: 30px;
+    }
+    button {
+      margin-right: 10px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      text-align: center;
+      padding: 8px;
+    }
+    thead {
+      background-color: #f0f0f0;
+    }
+    .staff-editable {
+      background-color: #fafafa;
+      cursor: pointer;
+    }
+    /* Colorazioni in base al tipo */
+    .bg-riposo {
+      background-color: #d2f8d2;
+    }
+    .bg-ferie {
+      background-color: #f7d8a8;
+    }
+    .bg-malattia {
+      background-color: #f5b8b8;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Gestione Turni (Staff)</h1>
+  <button id="btnSalva">Salva su Gist</button>
+  <button id="btnLogout">Logout Staff</button>
+</header>
+
+<section>
+  <h2>Tabella Turni</h2>
+  <div id="scheduleContainer"></div>
+</section>
+
+<section>
+  <h2>Statistiche</h2>
+  <div id="statsContainer"></div>
+</section>
+
+<script>
+/** Variabili globali */
+let gistID = null;
+let githubToken = null;
+let isStaff = false;
+let appData = null;
+let currentDates = [];
+
+/** Inizializza la pagina */
+window.addEventListener("DOMContentLoaded", () => {
+  checkStaffAuth();
+
+  gistID = localStorage.getItem("myApp_gistID") || null;
+  githubToken = localStorage.getItem("myApp_token") || null;
+
+  if (!gistID || !githubToken) {
+    alert("Gist ID o Token mancanti. Torna al login e inseriscili.");
+    // Se preferisci, reindirizza a login.html:
+    // window.location.href = "login.html";
+  }
+
+  document.getElementById("btnSalva").addEventListener("click", saveToGist);
+  document.getElementById("btnLogout").addEventListener("click", logoutStaff);
+
+  // Genera le date per il mese successivo
+  generateMonthDates();
+
+  // Carica i dati dal Gist o usa dati di default
+  loadDataFromGist();
+});
+
+/** Verifica se l’utente è autenticato come staff */
+function checkStaffAuth() {
+  const staffFlag = localStorage.getItem("myApp_isStaff");
+  if (staffFlag !== "true") {
+    alert("Non sei autenticato come staff. Torna al login.");
+    window.location.href = "login.html";
+  } else {
+    isStaff = true;
+  }
+}
+
+/** Genera l'array di date per il mese successivo */
+function generateMonthDates() {
+  currentDates = [];
+  const now = new Date();
+  const nextMonth = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const daysInNextMonth = new Date(year, nextMonth + 1, 0).getDate();
+
+  for (let d = 1; d <= daysInNextMonth; d++) {
+    const dateObj = new Date(year, nextMonth, d);
+    const iso = dateObj.toISOString().split("T")[0];
+    currentDates.push(iso);
+  }
+}
+
+/** Carica i dati dal Gist (file shifts.json) */
+function loadDataFromGist() {
+  fetch(`https://api.github.com/gists/${gistID}`, {
+    method: "GET",
+    headers: {
+      "Accept": "application/vnd.github.v3+json",
+      "Authorization": `token ${githubToken}`
+    }
+  })
+  .then(res => {
+    if (!res.ok) {
+      throw new Error("Errore HTTP: " + res.status);
+    }
+    return res.json();
+  })
+  .then(gist => {
+    if (!gist.files["shifts.json"]) {
+      appData = {
+        "employees": [
+          {"id": "1", "name": "Mario Rossi"},
+          {"id": "2", "name": "Laura Bianchi"}
+        ],
+        "shifts": []
+      };
+      alert("File shifts.json non trovato. Verranno utilizzati dati di default.");
+      renderSchedule();
+      renderStats();
+    } else {
+      const content = gist.files["shifts.json"].content;
+      appData = JSON.parse(content);
+      renderSchedule();
+      renderStats();
+    }
+  })
+  .catch(err => {
+    console.error("Errore caricando i dati dal Gist:", err);
+    alert("Errore nel caricamento dal Gist. Vedi console.");
+    appData = {
+      "employees": [
+        {"id": "1", "name": "Mario Rossi"},
+        {"id": "2", "name": "Laura Bianchi"}
+      ],
+      "shifts": []
+    };
+    renderSchedule();
+    renderStats();
+  });
+}
+
+/** Renderizza la tabella dei turni */
+function renderSchedule() {
+  const container = document.getElementById("scheduleContainer");
+  container.innerHTML = "";
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const tbody = document.createElement("tbody");
+
+  // Header della tabella
+  const headerRow = document.createElement("tr");
+  const thName = document.createElement("th");
+  thName.textContent = "Dipendente";
+  headerRow.appendChild(thName);
+
+  currentDates.forEach(dateStr => {
+    const th = document.createElement("th");
+    th.textContent = dateStr;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+
+  // Corpo: una riga per ogni dipendente
+  appData.employees.forEach(emp => {
+    const row = document.createElement("tr");
+
+    const tdName = document.createElement("td");
+    tdName.textContent = emp.name;
+    row.appendChild(tdName);
+
+    currentDates.forEach(dateStr => {
+      const td = document.createElement("td");
+      const shift = appData.shifts.find(s => s.employeeId === emp.id && s.date === dateStr);
+
+      if (shift) {
+        if (["riposo", "ferie", "malattia"].includes(shift.type)) {
+          td.textContent = shift.type;
+          if (shift.type === "riposo") td.classList.add("bg-riposo");
+          if (shift.type === "ferie") td.classList.add("bg-ferie");
+          if (shift.type === "malattia") td.classList.add("bg-malattia");
+        } else {
+          td.textContent = (shift.start || "") + " - " + (shift.end || "");
+        }
+      } else {
+        td.textContent = "";
+      }
+
+      // Se in modalità staff, rendi la cella editabile
+      if (isStaff) {
+        td.classList.add("staff-editable");
+        td.addEventListener("click", () => editShift(emp.id, dateStr));
+      }
+
+      row.appendChild(td);
+    });
+
+    tbody.appendChild(row);
+  });
+
+  table.appendChild(thead);
+  table.appendChild(tbody);
+  container.appendChild(table);
+
+  renderStats();
+}
+
+/** Gestisce la modifica di un turno al click di una cella */
+function editShift(employeeId, dateStr) {
+  let shift = appData.shifts.find(s => s.employeeId === employeeId && s.date === dateStr);
+  if (!shift) {
+    shift = {
+      employeeId: employeeId,
+      date: dateStr,
+      type: "standard",
+      start: "",
+      end: ""
+    };
+    appData.shifts.push(shift);
+  }
+
+  const newType = prompt("Tipo turno? (standard, riposo, ferie, malattia, straordinario)", shift.type);
+  if (newType === null) return;
+  shift.type = newType.toLowerCase();
+
+  if (["riposo", "ferie", "malattia"].includes(shift.type)) {
+    shift.start = "";
+    shift.end = "";
+  } else {
+    const startTime = prompt("Orario inizio (HH:MM)", shift.start || "08:00");
+    if (startTime === null) return;
+    shift.start = startTime;
+
+    const endTime = prompt("Orario fine (HH:MM)", shift.end || "16:00");
+    if (endTime === null) return;
+    shift.end = endTime;
+  }
+
+  renderSchedule();
+  renderStats();
+}
+
+/** Salva i dati aggiornati sul Gist (PATCH) */
+function saveToGist() {
+  if (!gistID || !githubToken) {
+    alert("Manca Gist ID o Token in localStorage, impossibile salvare.");
+    return;
+  }
+  const newContent = JSON.stringify(appData, null, 2);
+  fetch(`https://api.github.com/gists/${gistID}`, {
+    method: "PATCH",
+    headers: {
+      "Accept": "application/vnd.github.v3+json",
+      "Content-Type": "application/json",
+      "Authorization": `token ${githubToken}`
+    },
+    body: JSON.stringify({
+      files: {
+        "shifts.json": {
+          content: newContent
+        }
+      }
+    })
+  })
+  .then(res => {
+    if (!res.ok) {
+      throw new Error("Errore HTTP: " + res.status);
+    }
+    return res.json();
+  })
+  .then(updated => {
+    alert("Dati salvati con successo su Gist!");
+  })
+  .catch(err => {
+    console.error("Errore salvataggio Gist:", err);
+    alert("Errore durante il salvataggio. Vedi console.");
+  });
+}
+
+/** Calcola e mostra le statistiche nel div #statsContainer */
+function renderStats() {
+  const statsContainer = document.getElementById("statsContainer");
+  statsContainer.innerHTML = "";
+
+  const stats = calculateAggregates();
+
+  let html = `<table>
+    <thead>
+      <tr>
+        <th>Dipendente</th>
+        <th>Ore Lavorate</th>
+        <th>Giorni Lavorati</th>
+        <th>Giorni Off</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  stats.forEach(s => {
+    html += `
+      <tr>
+        <td>${s.name}</td>
+        <td>${s.totalHours.toFixed(2)}</td>
+        <td>${s.daysWorked}</td>
+        <td>${s.daysOff}</td>
+      </tr>
+    `;
+  });
+  html += "</tbody></table>";
+
+  statsContainer.innerHTML = html;
+}
+
+/** Calcola le statistiche (ore lavorate, giorni lavorati e giorni off) per ogni dipendente */
+function calculateAggregates() {
+  let results = [];
+  appData.employees.forEach(emp => {
+    const shiftsEmp = appData.shifts.filter(s => s.employeeId === emp.id);
+    let totalHours = 0;
+    let daysWorked = 0;
+    let daysOff = 0;
+
+    shiftsEmp.forEach(shift => {
+      if (["riposo", "ferie", "malattia"].includes(shift.type)) {
+        daysOff++;
+      } else {
+        if (shift.start && shift.end) {
+          const st = parseTime(shift.start);
+          const en = parseTime(shift.end);
+          let h = (en.hours + en.minutes/60) - (st.hours + st.minutes/60);
+          if (h < 0) h = 0;
+          totalHours += h;
+        }
+        daysWorked++;
+      }
+    });
+
+    results.push({
+      id: emp.id,
+      name: emp.name,
+      totalHours: totalHours,
+      daysWorked: daysWorked,
+      daysOff: daysOff
+    });
+  });
+  return results;
+}
+
+/** Converte una stringa "HH:MM" in un oggetto {hours, minutes} */
+function parseTime(timeStr) {
+  const [hh, mm] = timeStr.split(":");
+  return { hours: parseInt(hh) || 0, minutes: parseInt(mm) || 0 };
+}
+
+/** Logout: rimuove il flag di autenticazione e torna alla pagina di login */
+function logoutStaff() {
+  localStorage.removeItem("myApp_isStaff");
+  window.location.href = "login.html";
+}
+</script>
+</body>
+</html>

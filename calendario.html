@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Calendario Turni (Sola Lettura)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      text-align: center;
+      padding: 8px;
+    }
+    thead {
+      background-color: #f0f0f0;
+    }
+    .bg-riposo {
+      background-color: #d2f8d2;
+    }
+    .bg-ferie {
+      background-color: #f7d8a8;
+    }
+    .bg-malattia {
+      background-color: #f5b8b8;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Calendario Turni - Sola Lettura</h1>
+<div id="scheduleContainer"></div>
+
+<script>
+let gistID = null;
+let githubToken = null;
+let appData = null;
+let currentDates = [];
+
+/** All’avvio della pagina, si tenta di recuperare le credenziali dal localStorage */
+window.addEventListener("DOMContentLoaded", () => {
+  gistID = localStorage.getItem("myApp_gistID");
+  githubToken = localStorage.getItem("myApp_token");
+
+  if (!gistID) {
+    gistID = prompt("Inserisci Gist ID per visualizzare i turni (privato o pubblico):");
+    if (gistID) localStorage.setItem("myApp_gistID", gistID);
+  }
+  if (!githubToken) {
+    githubToken = prompt("Inserisci GitHub Token (se il Gist è privato):");
+    if (githubToken) localStorage.setItem("myApp_token", githubToken);
+  }
+
+  generateMonthDates();
+  loadDataFromGist();
+});
+
+/** Genera le date per il mese successivo */
+function generateMonthDates() {
+  currentDates = [];
+  const now = new Date();
+  const nextMonth = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const daysInNextMonth = new Date(year, nextMonth + 1, 0).getDate();
+
+  for (let d = 1; d <= daysInNextMonth; d++) {
+    const dateObj = new Date(year, nextMonth, d);
+    const iso = dateObj.toISOString().split("T")[0];
+    currentDates.push(iso);
+  }
+}
+
+/** Carica i dati dal Gist in sola lettura */
+function loadDataFromGist() {
+  if (!gistID) {
+    alert("Nessun Gist ID disponibile. Impossibile caricare i turni.");
+    return;
+  }
+
+  fetch(`https://api.github.com/gists/${gistID}`, {
+    method: "GET",
+    headers: {
+      "Accept": "application/vnd.github.v3+json",
+      ...(githubToken ? {"Authorization": `token ${githubToken}`} : {})
+    }
+  })
+  .then(res => {
+    if (!res.ok) {
+      throw new Error("Errore HTTP: " + res.status);
+    }
+    return res.json();
+  })
+  .then(gist => {
+    if (!gist.files["shifts.json"]) {
+      alert("Impossibile trovare 'shifts.json' nel Gist. Visualizzazione non disponibile.");
+      return;
+    }
+    const content = gist.files["shifts.json"].content;
+    appData = JSON.parse(content);
+    renderSchedule();
+  })
+  .catch(err => {
+    console.error("Errore caricando i dati dal Gist:", err);
+    alert("Errore durante il caricamento dei turni.");
+  });
+}
+
+/** Renderizza la tabella in sola lettura */
+function renderSchedule() {
+  const container = document.getElementById("scheduleContainer");
+  container.innerHTML = "";
+
+  if (!appData) {
+    container.textContent = "Nessun dato disponibile.";
+    return;
+  }
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const tbody = document.createElement("tbody");
+
+  // Header della tabella
+  const headerRow = document.createElement("tr");
+  const thName = document.createElement("th");
+  thName.textContent = "Dipendente";
+  headerRow.appendChild(thName);
+
+  currentDates.forEach(dateStr => {
+    const th = document.createElement("th");
+    th.textContent = dateStr;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+
+  // Corpo: una riga per ogni dipendente
+  appData.employees.forEach(emp => {
+    const row = document.createElement("tr");
+
+    const tdName = document.createElement("td");
+    tdName.textContent = emp.name;
+    row.appendChild(tdName);
+
+    currentDates.forEach(dateStr => {
+      const td = document.createElement("td");
+      const shift = appData.shifts.find(s => s.employeeId === emp.id && s.date === dateStr);
+
+      if (shift) {
+        if (["riposo", "ferie", "malattia"].includes(shift.type)) {
+          td.textContent = shift.type;
+          if (shift.type === "riposo") td.classList.add("bg-riposo");
+          if (shift.type === "ferie") td.classList.add("bg-ferie");
+          if (shift.type === "malattia") td.classList.add("bg-malattia");
+        } else {
+          td.textContent = (shift.start || "") + " - " + (shift.end || "");
+        }
+      } else {
+        td.textContent = "";
+      }
+      row.appendChild(td);
+    });
+
+    tbody.appendChild(row);
+  });
+
+  table.appendChild(thead);
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+</script>
+
+</body>
+</html>
