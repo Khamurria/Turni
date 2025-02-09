@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestione Turni - Area Staff</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f4f7f9;
+      margin: 20px;
+      color: #333;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    header h1 {
+      color: #5563DE;
+    }
+    header button {
+      padding: 8px 12px;
+      margin: 5px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      color: #fff;
+    }
+    #btnSalva { background: #28a745; }
+    #btnStatistiche { background: #17a2b8; }
+    #btnLogout { background: #dc3545; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ddd;
+      text-align: center;
+      padding: 10px;
+      vertical-align: top;
+    }
+    thead {
+      background: #5563DE;
+      color: #fff;
+    }
+    td {
+      cursor: pointer;
+      position: relative;
+    }
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      width: 320px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      position: relative;
+    }
+    .close-button {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      font-size: 24px;
+      cursor: pointer;
+      color: #888;
+    }
+    .modal-content label {
+      display: block;
+      margin-top: 10px;
+      font-size: 0.9em;
+    }
+    .modal-content input[type="time"],
+    .modal-content select {
+      width: 100%;
+      padding: 6px;
+      margin-top: 5px;
+      font-size: 1em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .modal-content button {
+      margin-top: 15px;
+      padding: 8px 12px;
+      width: 48%;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      color: #fff;
+    }
+    #btnSaveModal { background: #28a745; }
+    #btnCancelModal { background: #dc3545; }
+    /* Celle divise in due parti: sopra l'orario, sotto il giustificativo */
+    .cell-content {
+      display: flex;
+      flex-direction: column;
+      height: 70px;
+      justify-content: center;
+    }
+    .cell-time {
+      font-weight: bold;
+      color: #333;
+    }
+    .cell-just {
+      font-size: 0.85em;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Area Staff - Gestione Turni</h1>
+  <button id="btnSalva">Salva su Gist</button>
+  <button id="btnStatistiche" onclick="window.location.href='statistiche.html'">Statistiche</button>
+  <button id="btnLogout">Logout</button>
+</header>
+
+<section id="scheduleSection">
+  <h2>Calendario Settimanale</h2>
+  <div id="scheduleContainer"></div>
+</section>
+
+<!-- Modale per editing turno -->
+<div id="editModal" class="modal">
+  <div class="modal-content">
+    <span class="close-button" id="modalClose">&times;</span>
+    <h2>Modifica Turno</h2>
+    <label for="inputStart">Orario Inizio:</label>
+    <input type="time" id="inputStart">
+    
+    <label for="inputEnd">Orario Fine:</label>
+    <input type="time" id="inputEnd">
+    
+    <label for="selectJustification">Giustificativo:</label>
+    <select id="selectJustification">
+      <option value="standard">Standard</option>
+      <option value="sede">Sede</option>
+      <option value="smart working">Smart Working</option>
+      <option value="ferie">Ferie</option>
+      <option value="festivo">Festivo</option>
+      <option value="cambio turno">Cambio Turno</option>
+      <option value="riposo">Riposo</option>
+    </select>
+    
+    <div style="margin-top:15px; text-align: center;">
+      <button id="btnSaveModal">Salva</button>
+      <button id="btnCancelModal">Annulla</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Variabili globali */
+let gistID = localStorage.getItem("myApp_gistID") || null;
+let githubToken = localStorage.getItem("myApp_token") || null;
+let appData = JSON.parse(localStorage.getItem("myApp_appData") || "null");
+let weeks = [];
+let editingDate = null; // data ISO del turno in modifica
+
+// All'avvio
+window.addEventListener("DOMContentLoaded", () => {
+  if (!gistID || !githubToken) {
+    alert("Gist ID o Token mancanti. Torna al login.");
+    window.location.href = "index.html";
+    return;
+  }
+  document.getElementById("btnSalva").addEventListener("click", saveToGist);
+  document.getElementById("btnLogout").addEventListener("click", logout);
+  document.getElementById("modalClose").addEventListener("click", closeModal);
+  document.getElementById("btnCancelModal").addEventListener("click", closeModal);
+  document.getElementById("btnSaveModal").addEventListener("click", saveModalData);
+  document.getElementById("selectJustification").addEventListener("change", function(){
+    let val = this.value;
+    if(val === "ferie" || val === "festivo"){
+      document.getElementById("inputStart").disabled = true;
+      document.getElementById("inputEnd").disabled = true;
+    } else {
+      document.getElementById("inputStart").disabled = false;
+      document.getElementById("inputEnd").disabled = false;
+    }
+  });
+  
+  // Se non esiste già appData in localStorage, caricalo dal Gist
+  if (!appData) {
+    loadDataFromGist();
+  } else {
+    renderCalendar();
+  }
+});
+
+/* Carica i dati dal Gist e salva anche in localStorage */
+function loadDataFromGist() {
+  fetch(`https://api.github.com/gists/${gistID}`, {
+    method: "GET",
+    headers: {
+      "Accept": "application/vnd.github.v3+json",
+      "Authorization": `token ${githubToken}`
+    }
+  })
+  .then(res => {
+    if (!res.ok) throw new Error("Errore HTTP: " + res.status);
+    return res.json();
+  })
+  .then(gist => {
+    if (!gist.files["shifts.json"]) {
+      appData = {
+        employees: [
+          { id: "1", name: "Mario Rossi" },
+          { id: "2", name: "Laura Bianchi" }
+          // Puoi aggiungere altri dipendenti qui
+        ],
+        shifts: []
+      };
+      alert("File shifts.json non trovato. Verranno usati dati di default.");
+    } else {
+      appData = JSON.parse(gist.files["shifts.json"].content);
+    }
+    // Salva appData in localStorage per persistenza
+    localStorage.setItem("myApp_appData", JSON.stringify(appData));
+    renderCalendar();
+  })
+  .catch(err => {
+    console.error("Errore caricando i dati:", err);
+    alert("Errore nel caricamento dei dati. Vedi console.");
+  });
+}
+
+/* Genera il calendario settimanale per il mese corrente */
+function generateWeeklyCalendar() {
+  let now = new Date();
+  let year = now.getFullYear();
+  let month = now.getMonth();
+  let firstDay = new Date(year, month, 1);
+  let lastDay = new Date(year, month + 1, 0);
+  
+  // Calcola l'inizio della settimana (lunedì) che contiene il primo giorno
+  let startDate = new Date(firstDay);
+  let dayOfWeek = startDate.getDay();
+  dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+  startDate.setDate(startDate.getDate() - (dayOfWeek - 1));
+  
+  // Calcola la fine della settimana che contiene l'ultimo giorno
+  let endDate = new Date(lastDay);
+  dayOfWeek = endDate.getDay();
+  dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+  endDate.setDate(endDate.getDate() + (7 - dayOfWeek));
+  
+  weeks = [];
+  let current = new Date(startDate);
+  while(current <= endDate) {
+    let week = [];
+    for(let i=0; i<7; i++){
+      week.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+}
+
+/* Renderizza la griglia settimanale */
+function renderCalendar() {
+  generateWeeklyCalendar();
+  const container = document.getElementById("scheduleContainer");
+  container.innerHTML = "";
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const tbody = document.createElement("tbody");
+  
+  // Intestazione: giorni della settimana
+  const headerRow = document.createElement("tr");
+  const daysOfWeek = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+  daysOfWeek.forEach(day => {
+    let th = document.createElement("th");
+    th.textContent = day;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  
+  // Righe per ogni settimana
+  weeks.forEach(week => {
+    let row = document.createElement("tr");
+    week.forEach(day => {
+      let td = document.createElement("td");
+      let isoDate = day.toISOString().split("T")[0];
+      // Mostra giorno (nome completo) e numero
+      let options = { weekday: 'long' };
+      let dayName = day.toLocaleDateString('it-IT', options);
+      let dayNumber = day.getDate();
+      td.innerHTML = `<div>${dayName} ${dayNumber}</div>`;
+      
+      // Se esiste un turno per la data, mostra orario e giustificativo
+      let shift = appData.shifts.find(s => s.date === isoDate);
+      if(shift){
+        td.innerHTML += `<div class="cell-content">
+                           <div class="cell-time">${shift.start ? shift.start + " - " + shift.end : ""}</div>
+                           <div class="cell-just">${shift.type}</div>
+                         </div>`;
+      }
+      
+      // In modalità staff, il clic apre il modale per editing
+      td.addEventListener("click", () => {
+        editingDate = isoDate;
+        openModal();
+      });
+      row.appendChild(td);
+    });
+    tbody.appendChild(row);
+  });
+  
+  table.appendChild(thead);
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+/* Apertura del modale di editing */
+function openModal() {
+  const modal = document.getElementById("editModal");
+  let shift = appData.shifts.find(s => s.date === editingDate);
+  if(shift){
+    document.getElementById("inputStart").value = shift.start || "";
+    document.getElementById("inputEnd").value = shift.end || "";
+    document.getElementById("selectJustification").value = shift.type || "standard";
+    if(shift.type === "ferie" || shift.type === "festivo"){
+      document.getElementById("inputStart").disabled = true;
+      document.getElementById("inputEnd").disabled = true;
+    } else {
+      document.getElementById("inputStart").disabled = false;
+      document.getElementById("inputEnd").disabled = false;
+    }
+  } else {
+    document.getElementById("inputStart").value = "";
+    document.getElementById("inputEnd").value = "";
+    document.getElementById("selectJustification").value = "standard";
+    document.getElementById("inputStart").disabled = false;
+    document.getElementById("inputEnd").disabled = false;
+  }
+  modal.style.display = "flex";
+}
+
+/* Chiude il modale */
+function closeModal() {
+  document.getElementById("editModal").style.display = "none";
+  editingDate = null;
+}
+
+/* Salva i dati dal modale nell'appData e persiste nel localStorage */
+function saveModalData() {
+  const start = document.getElementById("inputStart").value;
+  const end = document.getElementById("inputEnd").value;
+  const justification = document.getElementById("selectJustification").value;
+  
+  let shift = appData.shifts.find(s => s.date === editingDate);
+  if(!shift){
+    shift = { date: editingDate, type: justification, start: start, end: end };
+    appData.shifts.push(shift);
+  } else {
+    shift.type = justification;
+    if(justification === "ferie" || justification === "festivo"){
+      shift.start = "";
+      shift.end = "";
+    } else {
+      shift.start = start;
+      shift.end = end;
+    }
+  }
+  localStorage.setItem("myApp_appData", JSON.stringify(appData));
+  closeModal();
+  renderCalendar();
+}
+
+/* Salva appData su Gist (PATCH) */
+function saveToGist() {
+  if(!gistID || !githubToken){
+    alert("Credenziali mancanti.");
+    return;
+  }
+  const newContent = JSON.stringify(appData, null, 2);
+  fetch(`https://api.github.com/gists/${gistID}`, {
+    method: "PATCH",
+    headers: {
+      "Accept": "application/vnd.github.v3+json",
+      "Content-Type": "application/json",
+      "Authorization": `token ${githubToken}`
+    },
+    body: JSON.stringify({ files: { "shifts.json": { content: newContent } } })
+  })
+  .then(res => {
+    if(!res.ok) throw new Error("Errore HTTP: " + res.status);
+    return res.json();
+  })
+  .then(updated => {
+    alert("Dati salvati con successo su Gist!");
+  })
+  .catch(err => {
+    console.error("Errore salvataggio:", err);
+    alert("Errore durante il salvataggio. Vedi console.");
+  });
+}
+
+/* Logout */
+function logout() {
+  localStorage.removeItem("myApp_isStaff");
+  window.location.href = "index.html";
+}
+</script>
+</body>
+</html>

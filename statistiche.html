@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Statistiche Turni</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f9fbfd;
+      margin: 20px;
+      color: #333;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #5563DE;
+    }
+    #chartContainer {
+      width: 80%;
+      margin: auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    table {
+      width: 80%;
+      margin: 20px auto;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: center;
+    }
+    thead {
+      background: #5563DE;
+      color: #fff;
+    }
+    button {
+      display: block;
+      margin: 20px auto;
+      padding: 8px 12px;
+      background: #17a2b8;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+    }
+  </style>
+  <!-- Carica Chart.js da CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>Statistiche Turni</h1>
+  <button onclick="window.location.href='inserimento.html'">Torna all'Area Staff</button>
+  <div id="chartContainer">
+    <canvas id="barChart"></canvas>
+  </div>
+  <h2>Dettaglio Statistiche</h2>
+  <div id="statsTableContainer"></div>
+  
+  <script>
+    let gistID = localStorage.getItem("myApp_gistID") || null;
+    let githubToken = localStorage.getItem("myApp_token") || null;
+    let appData = null;
+    
+    window.addEventListener("DOMContentLoaded", () => {
+      if (!gistID || !githubToken) {
+        alert("Credenziali mancanti. Torna al login.");
+        window.location.href = "index.html";
+        return;
+      }
+      loadDataFromGist();
+    });
+    
+    function loadDataFromGist() {
+      fetch(`https://api.github.com/gists/${gistID}`, {
+        method: "GET",
+        headers: {
+          "Accept": "application/vnd.github.v3+json",
+          "Authorization": `token ${githubToken}`
+        }
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("Errore HTTP: " + res.status);
+        return res.json();
+      })
+      .then(gist => {
+        if (!gist.files["shifts.json"]) {
+          alert("File shifts.json non trovato nel Gist.");
+          return;
+        }
+        appData = JSON.parse(gist.files["shifts.json"].content);
+        renderStatistics();
+      })
+      .catch(err => {
+        console.error("Errore caricando dati:", err);
+        alert("Errore nel caricamento dei dati. Vedi console.");
+      });
+    }
+    
+    function renderStatistics() {
+      let aggregates = calculateAdvancedStats(appData);
+      renderTable(aggregates);
+      renderChart(aggregates);
+    }
+    
+    // Calcola statistiche avanzate per ogni dipendente
+    function calculateAdvancedStats(data) {
+      let results = [];
+      data.employees.forEach(emp => {
+        let shiftsEmp = data.shifts.filter(s => s.employeeId === emp.id);
+        let totalHours = 0;
+        let totalShifts = shiftsEmp.length;
+        let daysAbsent = 0;
+        let permitRequests = 0; // ad esempio, ferie, festivo, cambio turno
+        let daysWorked = 0;
+        
+        shiftsEmp.forEach(shift => {
+          if(["ferie", "festivo", "malattia", "riposo"].includes(shift.type)){
+            daysAbsent++;
+          } 
+          if(["ferie", "festivo", "cambio turno"].includes(shift.type)){
+            permitRequests++;
+          }
+          if(shift.start && shift.end && !["ferie","festivo","malattia","riposo"].includes(shift.type)){
+            let h = calculateHours(shift.start, shift.end);
+            totalHours += h;
+            daysWorked++;
+          }
+        });
+        
+        let absenceFrequency = totalShifts ? (daysAbsent / totalShifts * 100).toFixed(1) : 0;
+        let permitFrequency = totalShifts ? (permitRequests / totalShifts * 100).toFixed(1) : 0;
+        
+        results.push({
+          id: emp.id,
+          name: emp.name,
+          totalHours: totalHours,
+          totalShifts: totalShifts,
+          daysAbsent: daysAbsent,
+          absenceFrequency: absenceFrequency,
+          permitRequests: permitRequests,
+          permitFrequency: permitFrequency,
+          daysWorked: daysWorked
+        });
+      });
+      return results;
+    }
+    
+    function calculateHours(start, end) {
+      let [h1, m1] = start.split(":").map(Number);
+      let [h2, m2] = end.split(":").map(Number);
+      let minutesStart = h1 * 60 + m1;
+      let minutesEnd = h2 * 60 + m2;
+      let diff = minutesEnd - minutesStart;
+      return diff > 0 ? diff / 60 : 0;
+    }
+    
+    function renderTable(aggregates) {
+      let html = `<table>
+                    <thead>
+                      <tr>
+                        <th>Dipendente</th>
+                        <th>Giorni Totali</th>
+                        <th>Giorni Lavorati</th>
+                        <th>Giorni di Assenza</th>
+                        <th>% Assenza</th>
+                        <th>Permessi Richiesti</th>
+                        <th>% Permessi</th>
+                        <th>Ore Lavorate</th>
+                      </tr>
+                    </thead>
+                    <tbody>`;
+      aggregates.forEach(a => {
+        html += `<tr>
+                   <td>${a.name}</td>
+                   <td>${a.totalShifts}</td>
+                   <td>${a.daysWorked}</td>
+                   <td>${a.daysAbsent}</td>
+                   <td>${a.absenceFrequency}%</td>
+                   <td>${a.permitRequests}</td>
+                   <td>${a.permitFrequency}%</td>
+                   <td>${a.totalHours.toFixed(2)}</td>
+                 </tr>`;
+      });
+      html += `</tbody></table>`;
+      document.getElementById("statsTableContainer").innerHTML = html;
+    }
+    
+    function renderChart(aggregates) {
+      let ctx = document.getElementById("barChart").getContext("2d");
+      let labels = aggregates.map(a => a.name);
+      let dataHours = aggregates.map(a => a.totalHours);
+      
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Ore Lavorate',
+            data: dataHours,
+            backgroundColor: 'rgba(75, 192, 192, 0.6)',
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Ore' }
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>

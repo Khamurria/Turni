@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Calendario Turni - Sola Lettura</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #eef2f7;
+      margin: 20px;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #5563DE;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: center;
+      vertical-align: top;
+    }
+    thead {
+      background: #5563DE;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+<h1>Calendario Turni - Sola Lettura</h1>
+<div id="scheduleContainer"></div>
+
+<script>
+let gistID = localStorage.getItem("myApp_gistID") || null;
+let githubToken = localStorage.getItem("myApp_token") || null;
+let appData = null;
+let weeks = [];
+
+window.addEventListener("DOMContentLoaded", () => {
+  if (!gistID) {
+    gistID = prompt("Inserisci il Gist ID (privato o pubblico):");
+    if(gistID) localStorage.setItem("myApp_gistID", gistID);
+  }
+  if (!githubToken) {
+    githubToken = prompt("Inserisci il GitHub Token (se necessario):");
+    if(githubToken) localStorage.setItem("myApp_token", githubToken);
+  }
+  generateWeeklyCalendar(new Date());
+  loadDataFromGist();
+});
+
+function generateWeeklyCalendar(date) {
+  let year = date.getFullYear();
+  let month = date.getMonth();
+  let firstDay = new Date(year, month, 1);
+  let lastDay = new Date(year, month + 1, 0);
+  
+  let startDate = new Date(firstDay);
+  let dayOfWeek = startDate.getDay();
+  dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+  startDate.setDate(startDate.getDate() - (dayOfWeek - 1));
+  
+  let endDate = new Date(lastDay);
+  dayOfWeek = endDate.getDay();
+  dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+  endDate.setDate(endDate.getDate() + (7 - dayOfWeek));
+  
+  weeks = [];
+  let current = new Date(startDate);
+  while(current <= endDate) {
+    let week = [];
+    for(let i=0; i<7; i++){
+      week.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+  renderCalendarGrid(weeks);
+}
+
+function renderCalendarGrid(weeks) {
+  const container = document.getElementById("scheduleContainer");
+  container.innerHTML = "";
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const tbody = document.createElement("tbody");
+  
+  const headerRow = document.createElement("tr");
+  const daysOfWeek = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+  daysOfWeek.forEach(day => {
+    let th = document.createElement("th");
+    th.textContent = day;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  
+  weeks.forEach(week => {
+    let row = document.createElement("tr");
+    week.forEach(day => {
+      let td = document.createElement("td");
+      let isoDate = day.toISOString().split("T")[0];
+      let options = { weekday: 'long' };
+      let dayName = day.toLocaleDateString('it-IT', options);
+      let dayNumber = day.getDate();
+      td.innerHTML = `<div>${dayName} ${dayNumber}</div>`;
+      
+      if(appData){
+        let shift = appData.shifts.find(s => s.date === isoDate);
+        if(shift){
+          td.innerHTML += `<div style="font-size:0.9em;">${shift.start ? shift.start + " - " + shift.end : ""}</div>`;
+          td.innerHTML += `<div style="font-size:0.8em; color:#555;">${shift.type}</div>`;
+        }
+      }
+      row.appendChild(td);
+    });
+    tbody.appendChild(row);
+  });
+  
+  table.appendChild(thead);
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+function loadDataFromGist() {
+  if(!gistID){
+    alert("Gist ID non disponibile.");
+    return;
+  }
+  fetch(`https://api.github.com/gists/${gistID}`, {
+    method: "GET",
+    headers: {
+      "Accept": "application/vnd.github.v3+json",
+      ...(githubToken ? {"Authorization": `token ${githubToken}`} : {})
+    }
+  })
+  .then(res => {
+    if(!res.ok) throw new Error("Errore HTTP: " + res.status);
+    return res.json();
+  })
+  .then(gist => {
+    if(!gist.files["shifts.json"]){
+      alert("Il file shifts.json non è stato trovato nel Gist.");
+      return;
+    }
+    appData = JSON.parse(gist.files["shifts.json"].content);
+    renderCalendarGrid(weeks);
+  })
+  .catch(err => {
+    console.error("Errore caricando i dati:", err);
+    alert("Errore durante il caricamento dei dati.");
+  });
+}
+</script>
+</body>
+</html>
